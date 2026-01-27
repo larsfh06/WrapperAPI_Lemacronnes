@@ -11,12 +11,16 @@ using WrapperAPI.Models.RestaurantModels;
 using WrapperAPI.NewFolder;
 using WrapperAPI.Repositories;
 
+
 namespace WrapperAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
     public class BoekingenController : ControllerBase
     {
+        bool AlGereserveerd = false;
+        int GefaaldeID = 0;
+        string GefaaldeDatum = "";
         private readonly IBoekingRepository _boekingRepository;
         private readonly IGebruikerRepository _gebruikerRepository;
         private readonly IAccommodatieRepository _accommodatieRepository;
@@ -70,11 +74,21 @@ namespace WrapperAPI.Controllers
             };
 
             var result = _hotelRepository.CreateReservering(hotelRequest);
-            idLijst.Add(result.reserveringID);
+            if (result.foutMelding == "Deze eenheid is niet beschikbaar in de gekozen periode.")
+            {
+                GefaaldeID = hotelRequest.eenheidID;
+                GefaaldeDatum = hotelRequest.startDatum.ToString();
+                AlGereserveerd = true;
+            }
+            else
+            {
+                idLijst.Add(result.reserveringID);
+            }
         }
 
         private void VerwerkGite(FlexiItemDTO item, List<int> idLijst)
         {
+            
             var gastInfo = _giteGastRepository.GetGiteGastById(item.GastID);
             if (gastInfo == null) throw new Exception("Gast niet gevonden");
 
@@ -96,7 +110,16 @@ namespace WrapperAPI.Controllers
             };
 
             var result = _giteRepository.CreateReservering(giteRequest);
-            idLijst.Add(result.reserveringID);
+            if (result.foutMelding == "Deze eenheid is niet beschikbaar in de gekozen periode.")
+            {
+                GefaaldeID = giteRequest.eenheidID;
+                GefaaldeDatum = giteRequest.startDatum.ToString();
+                AlGereserveerd = true;
+            }
+            else
+            {
+                idLijst.Add(result.reserveringID);
+            }
         }
 
         private void VerwerkCamping(FlexiItemDTO item, List<int> idLijst)
@@ -114,13 +137,23 @@ namespace WrapperAPI.Controllers
             };
 
             var result = _boekingRepository.CreateBoeking(nieuweBoeking);
-            idLijst.Add(result.BoekingID);
+            if (result.BoekingID == -1)
+            {
+                GefaaldeID = nieuweBoeking.AccommodatieID;
+                GefaaldeDatum = nieuweBoeking.CheckInDatum.ToString();
+                AlGereserveerd = true;
+            }
+            else
+            {
+                idLijst.Add(result.BoekingID);
+            }
         }
 
         private void VerwerkRestaurant(FlexiItemDTO item, List<int> idLijst)
         {
             var restRequest = new SendingReservering // Of hoe je restaurant model ook heet
             {
+                boekingID = item.GastID,
                 tafelID = item.EenheidID,
                 datumTijd = item.StartDatum, // Meestal alleen startdatum/tijd nodig
                 aantalVolwassenen = item.AantalVolwassenen, 
@@ -128,15 +161,24 @@ namespace WrapperAPI.Controllers
                 aantalOudereKinderen = item.AantalOudereKinderen
             };
 
-            var result = _reserveringRepository.CreateReservering(restRequest);
-            idLijst.Add(result.reserveringID);
+            var result = _reserveringRepository.CreateReservering(restRequest, restRequest.boekingID);
+            if (result.reserveringID == -1)
+            {
+                GefaaldeID = restRequest.tafelID;
+                GefaaldeDatum = restRequest.datumTijd.ToString();
+                AlGereserveerd = true;
+
+            }
+            else
+            {
+                idLijst.Add(result.reserveringID);
+            }
         }
 
         [HttpPost("create-flexi")]
         public ActionResult CreateFlexi([FromBody] FlexiCombiDTO dto)
         {
             if (dto == null) return BadRequest("Geen data ontvangen.");
-
             var resultaten = new
             {
                 CampingIDs = new List<int>(),
@@ -175,6 +217,31 @@ namespace WrapperAPI.Controllers
                     {
                         resultaten.Errors.Add($"{item.AccommodatieType} fout: {ex.Message}");
                     }
+                }
+                if (AlGereserveerd == true)
+                {
+                    AlGereserveerd = false;
+                    foreach (var item in resultaten.CampingIDs)
+                    {
+                        _boekingRepository.DeleteBoeking(item);
+                    }
+                    foreach (var item in resultaten.RestaurantIDs)
+                    {
+                        _reserveringRepository.DeleteReservering(item);
+                    }
+                    foreach (var item in resultaten.HotelIDs)
+                    {
+                        _hotelRepository.DeleteReservering(item);
+                    }
+                    foreach (var item in resultaten.GiteIDs)
+                    {
+                        _giteRepository.DeleteReservering(item);
+                    }
+                    return Ok(new
+                    {
+                        Bericht = "Verwerking gefaald",
+                        Details = $"De reservering met accommodatie nummer {GefaaldeID} en datum {GefaaldeDatum} is al gereserveerd."
+                    });
                 }
                 return Ok(new
                 {

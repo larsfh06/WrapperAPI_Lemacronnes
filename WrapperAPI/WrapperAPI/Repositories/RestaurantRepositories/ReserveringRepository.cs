@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using WrapperAPI.Interfaces.IRestaurantRepositories;
 using WrapperAPI.Models.CampingModels;
+using WrapperAPI.Models.GiteModels;
 using WrapperAPI.Models.RestaurantModels;
 
 namespace WrapperAPI.Repositories.RestaurantRepositories
@@ -12,6 +13,7 @@ namespace WrapperAPI.Repositories.RestaurantRepositories
     {
         private readonly HttpClient _httpClient;
         private readonly string _baseUrl;
+        private readonly string _campingUrl;
         private readonly JsonSerializerOptions _jsonOptions;
 
         // Gebruik de TafelRepository voor verrijking binnen het restaurant domein
@@ -24,6 +26,9 @@ namespace WrapperAPI.Repositories.RestaurantRepositories
 
             _baseUrl = config["ExternalApi:BaseUrlRestaurant"]
                 ?? "https://webapp-lgpteam-restaurant-marconnes.azurewebsites.net";
+
+            _campingUrl = config["ExternalApi:BaseUrlCamping"]
+                ?? "https://webapp-lgpteam-camping-marconnes.azurewebsites.net";
 
             _jsonOptions = new JsonSerializerOptions
             {
@@ -102,8 +107,33 @@ namespace WrapperAPI.Repositories.RestaurantRepositories
             return res;
         }
 
-        public RecievingReservering CreateReservering(SendingReservering reservering)
+        public RecievingReservering CreateReservering(SendingReservering reservering, int gebruikerID)
         {
+
+            //Hier de boeking verwerking naar gebruiker toevoegen
+            var url = $"{_baseUrl}/api/Boeking/0/{gebruikerID}/0?BetalingID=0&IncludeGebruiker=false&IncludeAccommodatie=false&IncludeBetalingen=false";
+            var result = _httpClient.GetAsync(url).Result;
+            result.EnsureSuccessStatusCode();
+            var boekingen = JsonSerializer.Deserialize<List<Boeking>>(result.Content.ReadAsStringAsync().Result, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+            int gevondenBoekingID = 0;
+            if (boekingen != null)
+            {
+                var passendeBoeking = boekingen.FirstOrDefault(result =>
+                    reservering.datumTijd >= result.CheckInDatum &&
+                    reservering.datumTijd <= result.CheckOutDatum);
+
+                if (passendeBoeking != null)
+                {
+                    gevondenBoekingID = passendeBoeking.BoekingID;
+                }
+            }
+
+            reservering.boekingID = gevondenBoekingID;
+
+
             // 1. Maak JSON van je 'Sending' model
             var jsonContent = JsonSerializer.Serialize(reservering);
             var content = new StringContent(jsonContent, System.Text.Encoding.UTF8, "application/json");
@@ -118,21 +148,33 @@ namespace WrapperAPI.Repositories.RestaurantRepositories
 
             var jsonString = response.Content.ReadAsStringAsync().Result.Trim();
 
-            // 2. Als Azure "true" teruggeeft, moeten we handmatig een Recieving object maken
+            // 2. Als Azure "true" teruggeeft
             if (jsonString.Equals("true", StringComparison.OrdinalIgnoreCase))
             {
                 return new RecievingReservering
                 {
-                    reserveringID = 0, // Dit wordt later gefixt door je 'Noodgreep' in de controller
+                    reserveringID = 0,
                     datumTijd = reservering.datumTijd,
                     aantalPersonen = reservering.aantalVolwassenen + reservering.aantalJongeKinderen + reservering.aantalOudereKinderen,
                     tafelID = reservering.tafelID
                 };
             }
 
-            // 3. Als Azure wel JSON teruggeeft, lees het dan uit als RecievingReservering
-            return JsonSerializer.Deserialize<RecievingReservering>(jsonString, _jsonOptions)
-                   ?? new RecievingReservering();
+            // 3. FIX: Check op de specifieke foutmelding
+            if (jsonString.Contains("Deze tafel is niet beschikbaar", StringComparison.OrdinalIgnoreCase))
+            {
+                return new RecievingReservering { reserveringID = -1 };
+            }
+
+            // 4. Als Azure wel JSON teruggeeft (begint met {), lees het dan uit
+            if (jsonString.StartsWith("{"))
+            {
+                return JsonSerializer.Deserialize<RecievingReservering>(jsonString, _jsonOptions)
+                       ?? new RecievingReservering();
+            }
+
+            // Fallback voor onbekende tekst responses
+            throw new Exception($"Onverwacht antwoord van server: {jsonString}");
         }
         public void UpdateReservering(RecievingReservering reservering)
         {

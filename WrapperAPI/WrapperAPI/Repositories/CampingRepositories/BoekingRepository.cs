@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text;
 using WrapperAPI.Models.CampingModels;
 using WrapperAPI.Interfaces.ICampingRepositories;
+using WrapperAPI.Models.RestaurantModels;
 
 namespace WrapperAPI.Repositories.CampingRepositories
 {
@@ -82,7 +83,10 @@ namespace WrapperAPI.Repositories.CampingRepositories
             {
                 return boeking;
             }
-
+            if (jsonString.Equals("false"))
+            {
+                return new Boeking { BoekingID = -1 };
+            }
             try
             {
                 return JsonSerializer.Deserialize<Boeking>(jsonString, _jsonOptions);

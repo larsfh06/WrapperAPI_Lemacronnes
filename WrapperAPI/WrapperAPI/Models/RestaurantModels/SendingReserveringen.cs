@@ -4,6 +4,8 @@ namespace WrapperAPI.Models.RestaurantModels
 {
     public class SendingReservering
     {
+        [JsonPropertyName("boekingID")]
+        public int boekingID { get; set; }
 
         [JsonPropertyName("datumTijd")]
         public DateTime datumTijd { get; set; }

@@ -7,8 +7,8 @@ namespace WrapperAPI.Interfaces.IRestaurantRepositories
     {
         IEnumerable<RecievingReservering> GetAllReserveringen();
 
-        RecievingReservering GetReserveringenById(int id);
-        RecievingReservering CreateReservering(SendingReservering reservering);
+        RecievingReservering GetReserveringenById(int id);  
+        RecievingReservering CreateReservering(SendingReservering reservering, int gebruikerID);        
 
         void UpdateReservering(RecievingReservering reservering);
 
