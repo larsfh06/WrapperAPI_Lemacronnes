@@ -127,20 +127,27 @@ namespace WrapperAPI.Controllers
             var nieuweBoeking = new Boeking
             {
                 GebruikerID = item.GastID,
-                AccommodatieID = item.EenheidID, // Hier is EenheidID de kampeerplek
-                CheckInDatum = item.StartDatum,
-                CheckOutDatum = item.EindDatum,
+                AccommodatieID = item.EenheidID,
+                checkInDatum = item.StartDatum,
+                checkOutDatum = item.EindDatum,
                 AantalVolwassenen = (byte)item.AantalVolwassenen,
                 AantalJongeKinderen = (byte)item.AantalJongeKinderen,
                 AantalOudereKinderen = (byte)item.AantalOudereKinderen,
-                Opmerking = item.Opmerking ?? ""
+                Opmerking = item.Opmerking ?? "",
+
+                // Voeg deze toe om de API tevreden te stellen:
+                Cancelled = false,
+                Datum = DateTime.Now,
+                Gebruiker = null, // Of een leeg object als de API op null crasht
+                Accommodatie = null,
+                Betalingen = new List<Betaling>()
             };
 
             var result = _boekingRepository.CreateBoeking(nieuweBoeking);
             if (result.BoekingID == -1)
             {
                 GefaaldeID = nieuweBoeking.AccommodatieID;
-                GefaaldeDatum = nieuweBoeking.CheckInDatum.ToString();
+                GefaaldeDatum = nieuweBoeking.checkInDatum.ToString();
                 AlGereserveerd = true;
             }
             else
@@ -215,7 +222,17 @@ namespace WrapperAPI.Controllers
                     }
                     catch (Exception ex)
                     {
+                        // ex.ToString() bevat de Message, de StackTrace en alle InnerExceptions.
+                        var volledigeFout = ex.ToString();
+
                         resultaten.Errors.Add($"{item.AccommodatieType} fout: {ex.Message}");
+
+                        return Ok(new
+                        {
+                            Bericht = "Verwerking Gestopt",
+                            Details = resultaten,
+                            DebugInfo = volledigeFout // Voeg dit toe om in Postman alles te zien
+                        });
                     }
                 }
                 if (AlGereserveerd == true)

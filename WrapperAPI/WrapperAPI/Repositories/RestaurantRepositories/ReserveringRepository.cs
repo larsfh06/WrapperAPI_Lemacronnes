@@ -111,7 +111,7 @@ namespace WrapperAPI.Repositories.RestaurantRepositories
         {
 
             //Hier de boeking verwerking naar gebruiker toevoegen
-            var url = $"{_baseUrl}/api/Boeking/0/{gebruikerID}/0?BetalingID=0&IncludeGebruiker=false&IncludeAccommodatie=false&IncludeBetalingen=false";
+            var url = $"{_campingUrl}/api/Boeking/0/{gebruikerID}/0?BetalingID=0&IncludeGebruiker=false&IncludeAccommodatie=false&IncludeBetalingen=false";
             var result = _httpClient.GetAsync(url).Result;
             result.EnsureSuccessStatusCode();
             var boekingen = JsonSerializer.Deserialize<List<Boeking>>(result.Content.ReadAsStringAsync().Result, new JsonSerializerOptions
@@ -122,8 +122,8 @@ namespace WrapperAPI.Repositories.RestaurantRepositories
             if (boekingen != null)
             {
                 var passendeBoeking = boekingen.FirstOrDefault(result =>
-                    reservering.datumTijd >= result.CheckInDatum &&
-                    reservering.datumTijd <= result.CheckOutDatum);
+                    reservering.datumTijd >= result.checkInDatum &&
+                    reservering.datumTijd <= result.checkOutDatum);
 
                 if (passendeBoeking != null)
                 {

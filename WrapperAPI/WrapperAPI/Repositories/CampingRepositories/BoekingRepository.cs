@@ -74,13 +74,23 @@ namespace WrapperAPI.Repositories.CampingRepositories
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new Exception($"Externe API Error: {response.StatusCode} - {jsonString}");
+                var errorBody = response.Content.ReadAsStringAsync().Result;
+                var reason = response.ReasonPhrase; // Bijv. "Internal Server Error"
+
+                // Soms zit de fout in de headers, maar laten we eerst dit proberen:
+                throw new Exception($"Fout: {response.StatusCode} ({reason}) - Body: '{errorBody}'");
             }
 
             // De fix: Als de API letterlijk "true" teruggeeft, sturen we het 
             // ingestuurde boeking-object terug (eventueel aangevuld met ID)
             if (jsonString.Equals("true", StringComparison.OrdinalIgnoreCase))
             {
+                var alleBoekingen = GetAllBoekingen();
+                var gevondenBoeking = alleBoekingen
+            .Where(b => b.GebruikerID == boeking.GebruikerID && b.AccommodatieID == boeking.AccommodatieID)
+            .OrderByDescending(b => b.BoekingID)
+            .FirstOrDefault();
+                boeking.BoekingID = gevondenBoeking.BoekingID;
                 return boeking;
             }
             if (jsonString.Equals("false"))
